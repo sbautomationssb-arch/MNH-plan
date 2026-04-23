@@ -1,18 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getSupabase, type SubmissionRow } from "@/lib/supabase";
 
-type Status = "pending" | "liked" | "refused";
+type Status = SubmissionRow["status"];
 
-type Submission = {
-  id: string;
-  url: string;
-  status: Status;
-  comment: string;
-  addedAt: number;
-};
-
-const STORAGE_KEY = "mnh-submissions";
 const URL_REGEX =
   /https?:\/\/(?:www\.)?instagram\.com\/(?:p|reel|tv)\/[A-Za-z0-9_-]+\/?/g;
 
@@ -20,71 +12,167 @@ function normalize(url: string) {
   return url.replace(/\/+$/, "");
 }
 
+type BatchResult = { added: number; skipped: number; error?: string };
+
 export function SubmissionQueue() {
+  const supabase = useMemo(() => getSupabase(), []);
   const [hydrated, setHydrated] = useState(false);
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
   const [draft, setDraft] = useState("");
-  const [lastBatch, setLastBatch] = useState<{ added: number; skipped: number } | null>(null);
+  const [lastBatch, setLastBatch] = useState<BatchResult | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const commentTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setSubmissions(JSON.parse(raw));
-    } catch {}
     setHydrated(true);
+    if (!supabase) return;
+    let cancelled = false;
+    supabase
+      .from("submissions")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          setLoadError(error.message);
+          return;
+        }
+        setSubmissions((data ?? []) as SubmissionRow[]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase]);
+
+  // Realtime sync: any client's INSERT/UPDATE/DELETE lands here too.
+  useEffect(() => {
+    if (!supabase) return;
+    const channel = supabase
+      .channel("submissions-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "submissions" },
+        (payload) => {
+          setSubmissions((prev) => {
+            if (payload.eventType === "INSERT") {
+              const row = payload.new as SubmissionRow;
+              if (prev.some((s) => s.id === row.id)) return prev;
+              return [row, ...prev];
+            }
+            if (payload.eventType === "UPDATE") {
+              const row = payload.new as SubmissionRow;
+              return prev.map((s) => (s.id === row.id ? row : s));
+            }
+            if (payload.eventType === "DELETE") {
+              const oldRow = payload.old as Partial<SubmissionRow>;
+              return prev.filter((s) => s.id !== oldRow.id);
+            }
+            return prev;
+          });
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase]);
+
+  useEffect(() => {
+    const timers = commentTimers.current;
+    return () => {
+      timers.forEach((t) => clearTimeout(t));
+      timers.clear();
+    };
   }, []);
 
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(submissions));
-    } catch {}
-  }, [submissions, hydrated]);
-
-  const handleProcess = () => {
+  const handleProcess = useCallback(async () => {
+    if (!supabase) {
+      setLastBatch({ added: 0, skipped: 0, error: "Supabase n'est pas configuré." });
+      return;
+    }
     const matches = draft.match(URL_REGEX) ?? [];
-    const existing = new Set(submissions.map((s) => normalize(s.url)));
     const seen = new Set<string>();
-    const now = Date.now();
-    const fresh: Submission[] = [];
+    const existing = new Set(submissions.map((s) => normalize(s.url)));
+    const toInsert: { url: string }[] = [];
     let skipped = 0;
-    matches.forEach((raw, idx) => {
+    matches.forEach((raw) => {
       const url = normalize(raw);
       if (seen.has(url) || existing.has(url)) {
         skipped += 1;
         return;
       }
       seen.add(url);
-      fresh.push({
-        id: `${now}-${idx}-${Math.random().toString(36).slice(2, 8)}`,
-        url,
-        status: "pending",
-        comment: "",
-        addedAt: now + idx,
-      });
+      toInsert.push({ url });
     });
-    if (fresh.length === 0 && skipped === 0) {
-      setLastBatch({ added: 0, skipped: 0 });
+    if (toInsert.length === 0) {
+      setLastBatch({ added: 0, skipped });
       return;
     }
-    setSubmissions((prev) => [...fresh, ...prev]);
+    const { data, error } = await supabase
+      .from("submissions")
+      .insert(toInsert)
+      .select();
+    if (error) {
+      setLastBatch({ added: 0, skipped, error: error.message });
+      return;
+    }
+    const inserted = (data ?? []) as SubmissionRow[];
+    // Optimistic local prepend; realtime will dedupe via id.
+    setSubmissions((prev) => {
+      const known = new Set(prev.map((s) => s.id));
+      return [...inserted.filter((r) => !known.has(r.id)), ...prev];
+    });
     setDraft("");
-    setLastBatch({ added: fresh.length, skipped });
-  };
+    setLastBatch({ added: inserted.length, skipped });
+  }, [draft, submissions, supabase]);
 
-  const update = (id: string, patch: Partial<Submission>) =>
-    setSubmissions((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  const updateStatus = useCallback(
+    async (id: string, status: Status) => {
+      if (!supabase) return;
+      setSubmissions((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, status } : s)),
+      );
+      await supabase.from("submissions").update({ status }).eq("id", id);
+    },
+    [supabase],
+  );
 
-  const remove = (id: string) =>
-    setSubmissions((prev) => prev.filter((s) => s.id !== id));
+  const toggleStatus = useCallback(
+    (id: string, target: "liked" | "refused") => {
+      const current = submissions.find((s) => s.id === id);
+      if (!current) return;
+      const next: Status = current.status === target ? "pending" : target;
+      void updateStatus(id, next);
+    },
+    [submissions, updateStatus],
+  );
 
-  const toggleStatus = (id: string, target: "liked" | "refused") => {
-    setSubmissions((prev) =>
-      prev.map((s) =>
-        s.id === id ? { ...s, status: s.status === target ? "pending" : target } : s,
-      ),
-    );
-  };
+  const setComment = useCallback(
+    (id: string, comment: string) => {
+      setSubmissions((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, comment } : s)),
+      );
+      if (!supabase) return;
+      const timers = commentTimers.current;
+      const existing = timers.get(id);
+      if (existing) clearTimeout(existing);
+      const t = setTimeout(async () => {
+        await supabase.from("submissions").update({ comment }).eq("id", id);
+        timers.delete(id);
+      }, 500);
+      timers.set(id, t);
+    },
+    [supabase],
+  );
+
+  const remove = useCallback(
+    async (id: string) => {
+      if (!supabase) return;
+      setSubmissions((prev) => prev.filter((s) => s.id !== id));
+      await supabase.from("submissions").delete().eq("id", id);
+    },
+    [supabase],
+  );
 
   const counts = submissions.reduce(
     (acc, s) => {
@@ -101,9 +189,23 @@ export function SubmissionQueue() {
       </div>
       <p className="text-sm mb-6 max-w-2xl">
         Colle n&apos;importe quoi qui contient des URLs Instagram (post, reel, tv).
-        Le système parse, flush la zone, et crée une row par URL pour que MN puisse
-        aimer, refuser, ou commenter.
+        Le système parse, flush la zone, et crée une row par URL. Partagé entre tous
+        ceux qui ont le lien — MN peut aimer, refuser ou commenter de son bord.
       </p>
+
+      {!supabase && hydrated && (
+        <div className="mb-4 text-xs rounded-2xl border border-red-500/40 bg-red-500/5 text-red-700 px-4 py-3">
+          Variables d&apos;env Supabase manquantes
+          (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY).
+          La queue est désactivée tant qu&apos;elles ne sont pas set.
+        </div>
+      )}
+
+      {loadError && (
+        <div className="mb-4 text-xs rounded-2xl border border-red-500/40 bg-red-500/5 text-red-700 px-4 py-3">
+          Erreur au chargement : {loadError}
+        </div>
+      )}
 
       <div className="bg-charcoal text-offwhite rounded-3xl p-5 md:p-6 mb-6">
         <textarea
@@ -120,7 +222,7 @@ export function SubmissionQueue() {
           <button
             type="button"
             onClick={handleProcess}
-            disabled={!draft.trim()}
+            disabled={!draft.trim() || !supabase}
             className="bg-teal text-charcoal font-semibold text-xs uppercase tracking-[0.12em] px-5 py-2 rounded-full disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
           >
             Process
@@ -128,15 +230,29 @@ export function SubmissionQueue() {
         </div>
         {lastBatch && (
           <div className="text-[11px] mt-3 opacity-70">
-            {lastBatch.added > 0 && <>+{lastBatch.added} ajoutée{lastBatch.added > 1 ? "s" : ""}. </>}
-            {lastBatch.skipped > 0 && <>{lastBatch.skipped} doublon{lastBatch.skipped > 1 ? "s" : ""} ignoré{lastBatch.skipped > 1 ? "s" : ""}. </>}
-            {lastBatch.added === 0 && lastBatch.skipped === 0 && <>Aucune URL Instagram détectée dans le texte.</>}
+            {lastBatch.error && <span className="text-red-400">Erreur : {lastBatch.error}. </span>}
+            {lastBatch.added > 0 && (
+              <>
+                +{lastBatch.added} ajoutée{lastBatch.added > 1 ? "s" : ""}.
+                {" "}
+              </>
+            )}
+            {lastBatch.skipped > 0 && (
+              <>
+                {lastBatch.skipped} doublon{lastBatch.skipped > 1 ? "s" : ""} ignoré
+                {lastBatch.skipped > 1 ? "s" : ""}.
+                {" "}
+              </>
+            )}
+            {!lastBatch.error && lastBatch.added === 0 && lastBatch.skipped === 0 && (
+              <>Aucune URL Instagram détectée dans le texte.</>
+            )}
           </div>
         )}
       </div>
 
       {hydrated && submissions.length > 0 && (
-        <div className="flex items-center gap-3 text-[11px] uppercase tracking-[0.12em] mb-4 opacity-70">
+        <div className="flex items-center gap-3 text-[11px] uppercase tracking-[0.12em] mb-4 opacity-70 flex-wrap">
           <span>{submissions.length} total</span>
           <span>·</span>
           <span>{counts.pending} pending</span>
@@ -147,7 +263,7 @@ export function SubmissionQueue() {
         </div>
       )}
 
-      {hydrated && submissions.length === 0 && (
+      {hydrated && supabase && submissions.length === 0 && !loadError && (
         <div className="text-sm opacity-50 italic">
           Aucune submission encore. Drop des URLs au-dessus pour commencer.
         </div>
@@ -156,11 +272,11 @@ export function SubmissionQueue() {
       {hydrated && submissions.length > 0 && (
         <div className="space-y-3">
           {submissions.map((s) => (
-            <SubmissionRow
+            <SubmissionRowItem
               key={s.id}
               submission={s}
               onToggle={(target) => toggleStatus(s.id, target)}
-              onComment={(comment) => update(s.id, { comment })}
+              onComment={(comment) => setComment(s.id, comment)}
               onRemove={() => remove(s.id)}
             />
           ))}
@@ -170,13 +286,13 @@ export function SubmissionQueue() {
   );
 }
 
-function SubmissionRow({
+function SubmissionRowItem({
   submission,
   onToggle,
   onComment,
   onRemove,
 }: {
-  submission: Submission;
+  submission: SubmissionRow;
   onToggle: (target: "liked" | "refused") => void;
   onComment: (comment: string) => void;
   onRemove: () => void;
