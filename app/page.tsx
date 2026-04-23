@@ -1,5 +1,6 @@
 import { pillars, contrastPrinciple, buckets } from "@/lib/content";
 import { BucketCard } from "@/components/BucketCard";
+import { SubmissionQueue } from "@/components/SubmissionQueue";
 
 export default function Home() {
   return (
@@ -62,6 +63,8 @@ export default function Home() {
           ))}
         </div>
       </section>
+
+      <SubmissionQueue />
 
       <footer className="mt-16 text-[11px] opacity-60">
         Ara3 Media × Marie-Neiges · plan vivant, updaté en continu.
