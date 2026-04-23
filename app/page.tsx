@@ -1,4 +1,4 @@
-import { pillars, contrastPrinciple, buckets, releases } from "@/lib/content";
+import { pillars, contrastPrinciple, buckets, releases, musicSetUrl } from "@/lib/content";
 import { BucketCard } from "@/components/BucketCard";
 import { ReleaseList } from "@/components/ReleaseList";
 import { SubmissionQueue } from "@/components/SubmissionQueue";
@@ -70,9 +70,19 @@ export default function Home() {
         <div className="text-xs font-semibold uppercase tracking-[0.14em] mb-4">
           04 — Sorties &amp; audios
         </div>
-        <p className="text-sm mb-6 max-w-2xl">
-          Calendrier des sorties avec liens SoundCloud. Titres, dates, liens — tout dans lib/content.ts.
+        <p className="text-sm mb-4 max-w-2xl">
+          Calendrier des sorties. Les audios vivent sur la playlist SoundCloud privée ci-dessous.
         </p>
+        {musicSetUrl && (
+          <a
+            href={musicSetUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 mb-6 text-xs font-semibold uppercase tracking-[0.12em] text-charcoal bg-teal hover:opacity-90 rounded-full px-5 py-2 transition-opacity"
+          >
+            → Écouter la playlist SoundCloud
+          </a>
+        )}
         <ReleaseList releases={releases} />
       </section>
 

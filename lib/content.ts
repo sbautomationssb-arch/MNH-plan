@@ -125,4 +125,23 @@ export type Release = {
   notes?: string;
 };
 
-export const releases: Release[] = [];
+export const musicSetUrl =
+  "https://soundcloud.com/marieneiges/sets/cest-pas-grave-si-je-pleure/s-hfd4I9ATZAm?si=07049de5fbb64861bc78fab129135263&utm_source=clipboard&utm_medium=text&utm_campaign=social_sharing";
+
+export const releases: Release[] = [
+  {
+    id: 1,
+    title: "Emporte-moi",
+    releaseDate: "27 mai 2026",
+  },
+  {
+    id: 2,
+    title: "Maintenant",
+    releaseDate: "20 août 2026",
+  },
+  {
+    id: 3,
+    title: "EP (focustrack bruit)",
+    releaseDate: "25 sept 2026",
+  },
+];
