@@ -116,3 +116,13 @@ export const buckets: Bucket[] = [
     refs: [],
   },
 ];
+
+export type Release = {
+  id: number;
+  title: string;
+  releaseDate: string; // format libre : "TBD", "15 juin 2026", "2026-06-15"…
+  soundcloudUrl?: string;
+  notes?: string;
+};
+
+export const releases: Release[] = [];

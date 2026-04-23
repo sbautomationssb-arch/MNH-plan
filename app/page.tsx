@@ -1,5 +1,6 @@
-import { pillars, contrastPrinciple, buckets } from "@/lib/content";
+import { pillars, contrastPrinciple, buckets, releases } from "@/lib/content";
 import { BucketCard } from "@/components/BucketCard";
+import { ReleaseList } from "@/components/ReleaseList";
 import { SubmissionQueue } from "@/components/SubmissionQueue";
 
 export default function Home() {
@@ -62,6 +63,17 @@ export default function Home() {
             <BucketCard key={b.id} bucket={b} />
           ))}
         </div>
+      </section>
+
+      {/* Releases */}
+      <section className="mt-14">
+        <div className="text-xs font-semibold uppercase tracking-[0.14em] mb-4">
+          04 — Sorties &amp; audios
+        </div>
+        <p className="text-sm mb-6 max-w-2xl">
+          Calendrier des sorties avec liens SoundCloud. Titres, dates, liens — tout dans lib/content.ts.
+        </p>
+        <ReleaseList releases={releases} />
       </section>
 
       <SubmissionQueue />
