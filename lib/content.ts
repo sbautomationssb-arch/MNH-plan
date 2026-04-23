@@ -107,4 +107,12 @@ export const buckets: Bucket[] = [
     highlight: "rattacher à la chanson",
     refs: ["https://www.instagram.com/p/DSdp4IbkxLB/"],
   },
+  {
+    id: 8,
+    name: "creative concepts",
+    description:
+      "Ici on veut essayer de trouver des concepts moins communs, des twists de perfo, des potentielles shareable trends qui sont vraiment autour de la chanson. Comme Dexter And the Moonrocks.",
+    highlight: "twists de perfo",
+    refs: [],
+  },
 ];
