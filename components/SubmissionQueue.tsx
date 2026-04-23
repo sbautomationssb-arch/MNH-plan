@@ -97,7 +97,7 @@ export function SubmissionQueue() {
   return (
     <section className="mt-14">
       <div className="text-xs font-semibold uppercase tracking-[0.14em] mb-4">
-        04 — Drop d&apos;URLs à reviewer
+        05 — Drop d&apos;URLs à reviewer
       </div>
       <p className="text-sm mb-6 max-w-2xl">
         Colle n&apos;importe quoi qui contient des URLs Instagram (post, reel, tv).
