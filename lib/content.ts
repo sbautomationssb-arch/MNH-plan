@@ -128,7 +128,7 @@ export type Release = {
 export const previewSet = {
   title: "c'est pas grave si je pleure",
   label: "Écoute privée",
-  url: "https://soundcloud.com/marieneiges/sets/cest-pas-grave-si-je-pleure/s-hfd4I9ATZAm",
+  url: "https://soundcloud.com/marieneiges/sets/cest-pas-grave-si-je-pleure?secret_token=s-hfd4I9ATZAm",
 };
 
 export const releases: Release[] = [
