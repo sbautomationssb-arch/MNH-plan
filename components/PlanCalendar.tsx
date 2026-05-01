@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type DragEvent, type SyntheticEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type SyntheticEvent } from "react";
 import { getSupabase, type SubmissionRow } from "@/lib/supabase";
+import { buckets } from "@/lib/content";
 
 const MONTH_NAMES = [
   "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
@@ -125,6 +126,17 @@ export function PlanCalendar() {
     [persist],
   );
 
+  const setBucket = useCallback(
+    async (id: string, bucket_id: number | null) => {
+      setRows((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, bucket_id } : s)),
+      );
+      if (!supabase) return;
+      await supabase.from("submissions").update({ bucket_id }).eq("id", id);
+    },
+    [supabase],
+  );
+
   const onDragStart = (id: string) => (e: DragEvent<HTMLDivElement>) => {
     setDraggingId(id);
     e.dataTransfer.effectAllowed = "move";
@@ -202,6 +214,7 @@ export function PlanCalendar() {
           onDragEnd={onDragEnd}
           onDragOver={onDragOver("__pool__")}
           onDrop={onDrop(null)}
+          onSetBucket={setBucket}
         />
         <div className="flex-1 min-w-0">
           <MonthHeader
@@ -210,7 +223,7 @@ export function PlanCalendar() {
             onNext={() => setMonthAnchor((d) => addMonths(d, 1))}
             onToday={() => setMonthAnchor(firstOfMonth(new Date()))}
           />
-          <div className="grid grid-cols-7 gap-px bg-charcoal/15 border border-charcoal/15 rounded-2xl overflow-hidden">
+          <div className="grid grid-cols-7 gap-px bg-charcoal/15 border border-charcoal/15 rounded-2xl">
             {DAY_HEADERS.map((d) => (
               <div
                 key={d}
@@ -256,6 +269,7 @@ export function PlanCalendar() {
                         isDragging={draggingId === r.id}
                         onDragStart={onDragStart(r.id)}
                         onDragEnd={onDragEnd}
+                        onSetBucket={(bid) => setBucket(r.id, bid)}
                       />
                     ))}
                   </div>
@@ -321,6 +335,7 @@ function PoolColumn({
   onDragEnd,
   onDragOver,
   onDrop,
+  onSetBucket,
 }: {
   rows: SubmissionRow[];
   dragOverKey: string | null;
@@ -328,6 +343,7 @@ function PoolColumn({
   onDragEnd: () => void;
   onDragOver: (e: DragEvent<HTMLDivElement>) => void;
   onDrop: (e: DragEvent<HTMLDivElement>) => void;
+  onSetBucket: (id: string, bucket_id: number | null) => void;
 }) {
   const isOver = dragOverKey === "__pool__";
   return (
@@ -349,13 +365,14 @@ function PoolColumn({
           Aime des submissions ci-dessus, elles apparaîtront ici.
         </p>
       ) : (
-        <div className="flex flex-col gap-2 max-h-[600px] overflow-y-auto pr-1">
+        <div className="flex flex-col gap-2">
           {rows.map((r) => (
             <PoolCard
               key={r.id}
               row={r}
               onDragStart={onDragStart(r.id)}
               onDragEnd={onDragEnd}
+              onSetBucket={(bid) => onSetBucket(r.id, bid)}
             />
           ))}
         </div>
@@ -368,10 +385,12 @@ function PoolCard({
   row,
   onDragStart,
   onDragEnd,
+  onSetBucket,
 }: {
   row: SubmissionRow;
   onDragStart: (e: DragEvent<HTMLDivElement>) => void;
   onDragEnd: () => void;
+  onSetBucket: (bucket_id: number | null) => void;
 }) {
   return (
     <div
@@ -381,7 +400,7 @@ function PoolCard({
       className="flex gap-2 bg-offwhite/5 hover:bg-offwhite/10 border border-offwhite/10 rounded-xl p-2 cursor-grab active:cursor-grabbing transition-colors"
     >
       <Thumb url={row.url} size={56} />
-      <div className="flex-1 min-w-0 flex flex-col">
+      <div className="flex-1 min-w-0 flex flex-col gap-1">
         <a
           href={row.url}
           target="_blank"
@@ -394,8 +413,11 @@ function PoolCard({
           {row.url.replace(/^https?:\/\/(www\.)?instagram\.com\//, "")}
         </a>
         {row.comment && (
-          <p className="text-[11px] opacity-70 mt-1 line-clamp-2">{row.comment}</p>
+          <p className="text-[11px] opacity-70 line-clamp-2">{row.comment}</p>
         )}
+        <div className="mt-auto pt-1">
+          <BucketPicker value={row.bucket_id} onChange={onSetBucket} />
+        </div>
       </div>
     </div>
   );
@@ -406,15 +428,22 @@ function DayCard({
   isDragging,
   onDragStart,
   onDragEnd,
+  onSetBucket,
 }: {
   row: SubmissionRow;
   isDragging: boolean;
   onDragStart: (e: DragEvent<HTMLDivElement>) => void;
   onDragEnd: () => void;
+  onSetBucket: (bucket_id: number | null) => void;
 }) {
-  const tooltip = row.comment
-    ? `${row.url}\n\n${row.comment}`
-    : row.url;
+  const bucket = row.bucket_id != null ? buckets.find((b) => b.id === row.bucket_id) : null;
+  const tooltip = [
+    row.url,
+    bucket ? `Bucket #${bucket.id} — ${bucket.name}` : null,
+    row.comment || null,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
   return (
     <div
       draggable
@@ -429,6 +458,112 @@ function DayCard({
       <span className="text-[9px] font-mono truncate opacity-70 flex-1 min-w-0">
         {row.url.replace(/^https?:\/\/(www\.)?instagram\.com\/(p|reel|tv)\//, "")}
       </span>
+      <BucketPicker value={row.bucket_id} onChange={onSetBucket} compact />
+    </div>
+  );
+}
+
+function BucketPicker({
+  value,
+  onChange,
+  compact = false,
+}: {
+  value: number | null;
+  onChange: (bucket_id: number | null) => void;
+  compact?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  const current = value != null ? buckets.find((b) => b.id === value) : null;
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+
+  const trigger = compact ? (
+    <button
+      type="button"
+      draggable={false}
+      onDragStart={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        setOpen((o) => !o);
+      }}
+      className={`shrink-0 text-[8px] font-bold px-1 py-0.5 rounded ${
+        current
+          ? "bg-teal text-charcoal"
+          : "bg-offwhite/15 text-offwhite/60 hover:bg-offwhite/25"
+      }`}
+      aria-label={current ? `Bucket ${current.id} — ${current.name}` : "Assigner un bucket"}
+    >
+      {current ? `#${current.id}` : "+"}
+    </button>
+  ) : (
+    <button
+      type="button"
+      draggable={false}
+      onDragStart={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        setOpen((o) => !o);
+      }}
+      className={`text-[10px] uppercase tracking-[0.08em] px-2 py-1 rounded-full transition-colors w-full text-left truncate ${
+        current
+          ? "bg-teal text-charcoal font-semibold"
+          : "border border-offwhite/20 text-offwhite/60 hover:border-teal hover:text-teal"
+      }`}
+    >
+      {current ? `#${current.id} ${current.name}` : "+ assigner un bucket"}
+    </button>
+  );
+
+  return (
+    <div ref={ref} className="relative">
+      {trigger}
+      {open && (
+        <div className="absolute z-50 top-full left-0 mt-1 min-w-[180px] bg-charcoal text-offwhite border border-offwhite/15 rounded-lg shadow-xl py-1 max-h-64 overflow-y-auto">
+          <button
+            type="button"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onChange(null);
+              setOpen(false);
+            }}
+            className="block w-full text-left px-3 py-1.5 text-[11px] hover:bg-offwhite/10 opacity-60"
+          >
+            Aucun bucket
+          </button>
+          <div className="border-t border-offwhite/10 my-1" />
+          {buckets.map((b) => {
+            const selected = value === b.id;
+            return (
+              <button
+                key={b.id}
+                type="button"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChange(b.id);
+                  setOpen(false);
+                }}
+                className={`block w-full text-left px-3 py-1.5 text-[11px] hover:bg-offwhite/10 ${
+                  selected ? "text-teal font-semibold" : ""
+                }`}
+              >
+                #{b.id} {b.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

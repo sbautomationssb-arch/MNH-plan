@@ -8,6 +8,7 @@ export type SubmissionRow = {
   status: "pending" | "liked" | "refused";
   comment: string;
   scheduled_for: string | null; // YYYY-MM-DD, null if not yet placed on calendar
+  bucket_id: number | null; // references the bucket id in lib/content.ts
   created_at: string;
   updated_at: string;
 };
