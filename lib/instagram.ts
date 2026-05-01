@@ -1,6 +1,7 @@
+// Instagram only includes og:* meta tags in the HTML for known social
+// crawlers — a desktop UA gets the app shell with no metadata.
 const HEADERS = {
-  "User-Agent":
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  "User-Agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
   "Accept-Language": "en-US,en;q=0.9",
 };
 
