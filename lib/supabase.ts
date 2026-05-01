@@ -2,6 +2,15 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+export type ProductionStatus = "draft" | "shot" | "edited" | "posted";
+export const PRODUCTION_STATUSES: ProductionStatus[] = ["draft", "shot", "edited", "posted"];
+export const PRODUCTION_STATUS_LABEL: Record<ProductionStatus, string> = {
+  draft: "Draft",
+  shot: "Shot",
+  edited: "Edited",
+  posted: "Posted",
+};
+
 export type SubmissionRow = {
   id: string;
   url: string;
@@ -9,6 +18,7 @@ export type SubmissionRow = {
   comment: string;
   scheduled_for: string | null; // YYYY-MM-DD, null if not yet placed on calendar
   bucket_id: number | null; // references the bucket id in lib/content.ts
+  production_status: ProductionStatus | null;
   created_at: string;
   updated_at: string;
 };

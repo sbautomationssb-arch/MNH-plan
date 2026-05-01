@@ -1,8 +1,28 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type SyntheticEvent } from "react";
-import { getSupabase, type SubmissionRow } from "@/lib/supabase";
+import {
+  getSupabase,
+  PRODUCTION_STATUSES,
+  PRODUCTION_STATUS_LABEL,
+  type ProductionStatus,
+  type SubmissionRow,
+} from "@/lib/supabase";
 import { buckets } from "@/lib/content";
+
+const STATUS_BADGE_CLS: Record<ProductionStatus, string> = {
+  draft: "bg-charcoal/30 text-offwhite",
+  shot: "bg-yellow-300 text-charcoal",
+  edited: "bg-orange-400 text-charcoal",
+  posted: "bg-teal text-charcoal",
+};
+
+const STATUS_DOT_CLS: Record<ProductionStatus, string> = {
+  draft: "bg-charcoal/40",
+  shot: "bg-yellow-300",
+  edited: "bg-orange-400",
+  posted: "bg-teal",
+};
 
 const MONTH_NAMES = [
   "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
@@ -137,6 +157,23 @@ export function PlanCalendar() {
     [supabase],
   );
 
+  const patchRow = useCallback(
+    async (id: string, patch: Partial<SubmissionRow>) => {
+      setRows((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+      );
+      if (!supabase) return;
+      await supabase.from("submissions").update(patch).eq("id", id);
+    },
+    [supabase],
+  );
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = useMemo(
+    () => (selectedId ? rows.find((r) => r.id === selectedId) ?? null : null),
+    [selectedId, rows],
+  );
+
   const onDragStart = (id: string) => (e: DragEvent<HTMLDivElement>) => {
     setDraggingId(id);
     e.dataTransfer.effectAllowed = "move";
@@ -215,6 +252,7 @@ export function PlanCalendar() {
           onDragOver={onDragOver("__pool__")}
           onDrop={onDrop(null)}
           onSetBucket={setBucket}
+          onOpen={setSelectedId}
         />
         <div className="flex-1 min-w-0">
           <MonthHeader
@@ -270,6 +308,7 @@ export function PlanCalendar() {
                         onDragStart={onDragStart(r.id)}
                         onDragEnd={onDragEnd}
                         onSetBucket={(bid) => setBucket(r.id, bid)}
+                        onOpen={() => setSelectedId(r.id)}
                       />
                     ))}
                   </div>
@@ -279,6 +318,14 @@ export function PlanCalendar() {
           </div>
         </div>
       </div>
+
+      {selected && (
+        <CardDetailModal
+          row={selected}
+          onClose={() => setSelectedId(null)}
+          onPatch={(patch) => patchRow(selected.id, patch)}
+        />
+      )}
     </section>
   );
 }
@@ -336,6 +383,7 @@ function PoolColumn({
   onDragOver,
   onDrop,
   onSetBucket,
+  onOpen,
 }: {
   rows: SubmissionRow[];
   dragOverKey: string | null;
@@ -344,6 +392,7 @@ function PoolColumn({
   onDragOver: (e: DragEvent<HTMLDivElement>) => void;
   onDrop: (e: DragEvent<HTMLDivElement>) => void;
   onSetBucket: (id: string, bucket_id: number | null) => void;
+  onOpen: (id: string) => void;
 }) {
   const isOver = dragOverKey === "__pool__";
   return (
@@ -373,6 +422,7 @@ function PoolColumn({
               onDragStart={onDragStart(r.id)}
               onDragEnd={onDragEnd}
               onSetBucket={(bid) => onSetBucket(r.id, bid)}
+              onOpen={() => onOpen(r.id)}
             />
           ))}
         </div>
@@ -386,32 +436,44 @@ function PoolCard({
   onDragStart,
   onDragEnd,
   onSetBucket,
+  onOpen,
 }: {
   row: SubmissionRow;
   onDragStart: (e: DragEvent<HTMLDivElement>) => void;
   onDragEnd: () => void;
   onSetBucket: (bucket_id: number | null) => void;
+  onOpen: () => void;
 }) {
   return (
     <div
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
+      onClick={onOpen}
       className="flex gap-2 bg-offwhite/5 hover:bg-offwhite/10 border border-offwhite/10 rounded-xl p-2 cursor-grab active:cursor-grabbing transition-colors"
     >
       <Thumb url={row.url} size={56} />
       <div className="flex-1 min-w-0 flex flex-col gap-1">
-        <a
-          href={row.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          onDragStart={(e) => e.stopPropagation()}
-          draggable={false}
-          className="text-[10px] font-mono break-all hover:text-teal opacity-80"
-        >
-          {row.url.replace(/^https?:\/\/(www\.)?instagram\.com\//, "")}
-        </a>
+        <div className="flex items-center justify-between gap-2">
+          <a
+            href={row.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            onDragStart={(e) => e.stopPropagation()}
+            draggable={false}
+            className="text-[10px] font-mono break-all hover:text-teal opacity-80 min-w-0"
+          >
+            {row.url.replace(/^https?:\/\/(www\.)?instagram\.com\//, "")}
+          </a>
+          {row.production_status && (
+            <span
+              className={`shrink-0 text-[8px] font-bold uppercase tracking-[0.08em] px-1.5 py-0.5 rounded ${STATUS_BADGE_CLS[row.production_status]}`}
+            >
+              {PRODUCTION_STATUS_LABEL[row.production_status]}
+            </span>
+          )}
+        </div>
         {row.comment && (
           <p className="text-[11px] opacity-70 line-clamp-2">{row.comment}</p>
         )}
@@ -429,17 +491,21 @@ function DayCard({
   onDragStart,
   onDragEnd,
   onSetBucket,
+  onOpen,
 }: {
   row: SubmissionRow;
   isDragging: boolean;
   onDragStart: (e: DragEvent<HTMLDivElement>) => void;
   onDragEnd: () => void;
   onSetBucket: (bucket_id: number | null) => void;
+  onOpen: () => void;
 }) {
   const bucket = row.bucket_id != null ? buckets.find((b) => b.id === row.bucket_id) : null;
+  const status = row.production_status;
   const tooltip = [
     row.url,
     bucket ? `Bucket #${bucket.id} — ${bucket.name}` : null,
+    status ? `Status: ${PRODUCTION_STATUS_LABEL[status]}` : null,
     row.comment || null,
   ]
     .filter(Boolean)
@@ -449,16 +515,212 @@ function DayCard({
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
+      onClick={onOpen}
       title={tooltip}
       className={`flex items-center gap-1.5 bg-charcoal text-offwhite rounded-md p-1 cursor-grab active:cursor-grabbing transition-opacity ${
         isDragging ? "opacity-30" : ""
       }`}
     >
+      <span
+        className={`shrink-0 w-1.5 h-7 rounded-sm ${
+          status ? STATUS_DOT_CLS[status] : "bg-offwhite/20"
+        }`}
+        aria-label={status ? PRODUCTION_STATUS_LABEL[status] : "Aucun status"}
+      />
       <Thumb url={row.url} size={28} compact />
       <span className="text-[9px] font-mono truncate opacity-70 flex-1 min-w-0">
         {row.url.replace(/^https?:\/\/(www\.)?instagram\.com\/(p|reel|tv)\//, "")}
       </span>
       <BucketPicker value={row.bucket_id} onChange={onSetBucket} compact />
+    </div>
+  );
+}
+
+function CardDetailModal({
+  row,
+  onClose,
+  onPatch,
+}: {
+  row: SubmissionRow;
+  onClose: () => void;
+  onPatch: (patch: Partial<SubmissionRow>) => void;
+}) {
+  const [comment, setComment] = useState(row.comment);
+  const onPatchRef = useRef(onPatch);
+  useEffect(() => {
+    onPatchRef.current = onPatch;
+  }, [onPatch]);
+
+  // Reset local comment when switching to a different row.
+  useEffect(() => {
+    setComment(row.comment);
+  }, [row.id, row.comment]);
+
+  // Debounced comment save.
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onCommentChange = (next: string) => {
+    setComment(next);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      onPatchRef.current({ comment: next });
+    }, 500);
+  };
+
+  // Flush pending comment on unmount.
+  useEffect(
+    () => () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    },
+    [],
+  );
+
+  // Close on Escape.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const bucket = row.bucket_id != null ? buckets.find((b) => b.id === row.bucket_id) : null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-offwhite rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between p-4 md:p-5 border-b border-charcoal/10">
+          <div className="text-[10px] uppercase tracking-[0.14em] opacity-60">
+            Détail · post
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fermer"
+            className="text-2xl leading-none px-2 opacity-50 hover:opacity-100 transition-opacity"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="p-4 md:p-5 flex flex-col md:flex-row gap-4 border-b border-charcoal/10">
+          <div className="shrink-0">
+            <Thumb url={row.url} size={160} />
+          </div>
+          <div className="flex-1 min-w-0 flex flex-col gap-3">
+            <a
+              href={row.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-xs break-all hover:text-teal transition-colors"
+            >
+              → {row.url.replace(/^https?:\/\/(www\.)?/, "")}
+            </a>
+
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.12em] opacity-60 mb-1.5">
+                Status de production
+              </div>
+              <div className="flex gap-1 flex-wrap">
+                {PRODUCTION_STATUSES.map((s) => {
+                  const active = row.production_status === s;
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => onPatch({ production_status: active ? null : s })}
+                      className={`text-[10px] uppercase tracking-[0.08em] font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                        active
+                          ? `${STATUS_BADGE_CLS[s]} border-transparent`
+                          : "border-charcoal/25 hover:border-charcoal hover:bg-charcoal hover:text-offwhite"
+                      }`}
+                    >
+                      {PRODUCTION_STATUS_LABEL[s]}
+                    </button>
+                  );
+                })}
+                {row.production_status && (
+                  <button
+                    type="button"
+                    onClick={() => onPatch({ production_status: null })}
+                    className="text-[10px] uppercase tracking-[0.08em] px-2 py-1 rounded-full opacity-50 hover:opacity-100"
+                  >
+                    × clear
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.12em] opacity-60 mb-1.5">
+                Bucket
+              </div>
+              <div className="flex gap-1 flex-wrap">
+                {buckets.map((b) => {
+                  const active = row.bucket_id === b.id;
+                  return (
+                    <button
+                      key={b.id}
+                      type="button"
+                      onClick={() => onPatch({ bucket_id: active ? null : b.id })}
+                      className={`text-[10px] uppercase tracking-[0.08em] px-2.5 py-1 rounded-full border transition-colors ${
+                        active
+                          ? "bg-teal text-charcoal border-teal font-semibold"
+                          : "border-charcoal/25 hover:border-teal hover:text-teal"
+                      }`}
+                    >
+                      #{b.id} {b.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="text-[11px] opacity-70">
+                {row.scheduled_for ? (
+                  <>Planifié pour <span className="font-semibold">{row.scheduled_for}</span></>
+                ) : (
+                  <>Dans le pool · pas encore placé</>
+                )}
+              </div>
+              {row.scheduled_for && (
+                <button
+                  type="button"
+                  onClick={() => onPatch({ scheduled_for: null })}
+                  className="text-[10px] uppercase tracking-[0.08em] px-3 py-1.5 rounded-full border border-charcoal/30 hover:border-charcoal hover:bg-charcoal hover:text-offwhite transition-colors"
+                >
+                  ↩ Retour pool
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 md:p-5">
+          <div className="text-[10px] uppercase tracking-[0.12em] opacity-60 mb-1.5">
+            Commentaires
+          </div>
+          <textarea
+            value={comment}
+            onChange={(e) => onCommentChange(e.target.value)}
+            placeholder="Notes, idées de caption, choses à coordonner avec MN…"
+            rows={5}
+            className="w-full bg-transparent border border-charcoal/15 rounded-xl p-3 text-sm resize-y outline-none focus:border-teal placeholder:opacity-40"
+          />
+          {bucket?.description && (
+            <p className="text-[11px] opacity-50 mt-3">
+              <span className="font-semibold">Rappel bucket #{bucket.id} :</span>{" "}
+              {bucket.description}
+            </p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
