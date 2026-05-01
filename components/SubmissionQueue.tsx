@@ -270,19 +270,78 @@ export function SubmissionQueue() {
       )}
 
       {hydrated && submissions.length > 0 && (
+        <SubmissionList
+          submissions={submissions}
+          onToggle={toggleStatus}
+          onComment={setComment}
+          onRemove={remove}
+        />
+      )}
+    </section>
+  );
+}
+
+function SubmissionList({
+  submissions,
+  onToggle,
+  onComment,
+  onRemove,
+}: {
+  submissions: SubmissionRow[];
+  onToggle: (id: string, target: "liked" | "refused") => void;
+  onComment: (id: string, comment: string) => void;
+  onRemove: (id: string) => void;
+}) {
+  const pending = submissions.filter((s) => s.status === "pending");
+  const reviewed = submissions.filter((s) => s.status !== "pending");
+  const [showReviewed, setShowReviewed] = useState(false);
+
+  return (
+    <div className="space-y-6">
+      {pending.length > 0 ? (
         <div className="space-y-3">
-          {submissions.map((s) => (
+          {pending.map((s) => (
             <SubmissionRowItem
               key={s.id}
               submission={s}
-              onToggle={(target) => toggleStatus(s.id, target)}
-              onComment={(comment) => setComment(s.id, comment)}
-              onRemove={() => remove(s.id)}
+              onToggle={(target) => onToggle(s.id, target)}
+              onComment={(comment) => onComment(s.id, comment)}
+              onRemove={() => onRemove(s.id)}
             />
           ))}
         </div>
+      ) : (
+        <div className="text-sm opacity-50 italic">
+          Tout est reviewé. Drop des nouvelles URLs au-dessus.
+        </div>
       )}
-    </section>
+
+      {reviewed.length > 0 && (
+        <div className="border-t border-charcoal/10 pt-4">
+          <button
+            type="button"
+            onClick={() => setShowReviewed((v) => !v)}
+            className="flex items-center gap-2 text-[11px] uppercase tracking-[0.12em] opacity-70 hover:opacity-100 transition-opacity"
+          >
+            <span>{showReviewed ? "▾" : "▸"}</span>
+            <span>{reviewed.length} déjà reviewée{reviewed.length > 1 ? "s" : ""}</span>
+          </button>
+          {showReviewed && (
+            <div className="space-y-3 mt-4">
+              {reviewed.map((s) => (
+                <SubmissionRowItem
+                  key={s.id}
+                  submission={s}
+                  onToggle={(target) => onToggle(s.id, target)}
+                  onComment={(comment) => onComment(s.id, comment)}
+                  onRemove={() => onRemove(s.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
