@@ -1,4 +1,4 @@
-import { pillars, contrastPrinciple, buckets, releases } from "@/lib/content";
+import { pillars, contrastPrinciple, buckets, releases, previewSet } from "@/lib/content";
 import { BucketCard } from "@/components/BucketCard";
 import { ReleaseList } from "@/components/ReleaseList";
 import { SubmissionQueue } from "@/components/SubmissionQueue";
@@ -73,6 +73,26 @@ export default function Home() {
         <p className="text-sm mb-6 max-w-2xl">
           Calendrier des sorties avec liens SoundCloud. Titres, dates, liens — tout dans lib/content.ts.
         </p>
+
+        <div className="bg-charcoal text-offwhite rounded-3xl p-5 md:p-6 mb-6">
+          <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+            <div className="text-teal text-[11px] font-semibold uppercase tracking-[0.12em]">
+              {previewSet.label}
+            </div>
+            <div className="display-tight text-teal text-lg">{previewSet.title}</div>
+          </div>
+          <iframe
+            title={previewSet.title}
+            width="100%"
+            height="300"
+            scrolling="no"
+            frameBorder="no"
+            allow="autoplay"
+            className="rounded-2xl"
+            src={`https://w.soundcloud.com/player/?url=${encodeURIComponent(previewSet.url)}&color=%2304e0bc&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false&visual=false`}
+          />
+        </div>
+
         <ReleaseList releases={releases} />
       </section>
 
