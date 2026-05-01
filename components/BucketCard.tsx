@@ -1,6 +1,14 @@
 import type { Bucket } from "@/lib/content";
+import { getInstagramThumbnail } from "@/lib/instagram";
 
-export function BucketCard({ bucket }: { bucket: Bucket }) {
+export async function BucketCard({ bucket }: { bucket: Bucket }) {
+  const refsWithThumbs = await Promise.all(
+    bucket.refs.map(async (url) => ({
+      url,
+      thumbnail: await getInstagramThumbnail(url),
+    })),
+  );
+
   return (
     <div className="bg-charcoal text-offwhite rounded-3xl p-6 md:p-8">
       <div className="text-teal text-xs font-semibold uppercase tracking-[0.14em] mb-3">
@@ -21,26 +29,39 @@ export function BucketCard({ bucket }: { bucket: Bucket }) {
         )}
       </p>
       <div className="border-t border-offwhite/15 pt-3 mt-3">
-        <div className="text-teal text-[10px] font-semibold uppercase tracking-[0.14em] mb-2">
+        <div className="text-teal text-[10px] font-semibold uppercase tracking-[0.14em] mb-3">
           Références visuelles
         </div>
-        {bucket.refs.length === 0 ? (
+        {refsWithThumbs.length === 0 ? (
           <p className="text-xs italic opacity-50">À venir</p>
         ) : (
-          <ul className="space-y-1">
-            {bucket.refs.map((ref) => (
-              <li key={ref} className="text-xs">
-                <a
-                  href={ref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-teal transition-colors"
-                >
-                  → {ref.replace(/^https?:\/\/(www\.)?/, "")}
-                </a>
-              </li>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {refsWithThumbs.map(({ url, thumbnail }) => (
+              <a
+                key={url}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group block aspect-square rounded-xl overflow-hidden bg-offwhite/5 border border-offwhite/10 hover:border-teal transition-colors relative"
+              >
+                {thumbnail ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={`/api/proxy-image?url=${encodeURIComponent(thumbnail)}`}
+                    alt=""
+                    loading="lazy"
+                    className="w-full h-full object-cover group-hover:opacity-90 transition-opacity"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center p-3 text-center">
+                    <span className="text-[10px] font-mono opacity-60 break-all">
+                      {url.replace(/^https?:\/\/(www\.)?instagram\.com\//, "")}
+                    </span>
+                  </div>
+                )}
+              </a>
             ))}
-          </ul>
+          </div>
         )}
       </div>
     </div>
