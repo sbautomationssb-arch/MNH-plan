@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type SyntheticEvent } from "react";
 import { getSupabase, type SubmissionRow } from "@/lib/supabase";
 
 type Status = SubmissionRow["status"];
@@ -307,60 +307,91 @@ function SubmissionRowItem({
       ? "bg-charcoal/[0.03] border-charcoal/15 opacity-60"
       : "bg-offwhite border-charcoal/15";
 
+  const [thumbBroken, setThumbBroken] = useState(false);
+  const handleImgError = (e: SyntheticEvent<HTMLImageElement>) => {
+    e.currentTarget.style.display = "none";
+    setThumbBroken(true);
+  };
+
   return (
     <div className={`rounded-2xl p-4 md:p-5 border transition-colors ${containerCls}`}>
-      <div className="flex items-start justify-between gap-3 flex-wrap">
+      <div className="flex gap-4">
         <a
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          className={`font-mono text-xs md:text-sm break-all hover:text-teal transition-colors ${isRefused ? "line-through" : ""}`}
+          aria-label={`Ouvrir ${url}`}
+          className="shrink-0 block w-24 h-24 md:w-28 md:h-28 rounded-xl overflow-hidden bg-charcoal/10 border border-charcoal/15 relative group"
         >
-          → {url.replace(/^https?:\/\/(www\.)?/, "")}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/api/ig-thumbnail?url=${encodeURIComponent(url)}`}
+            alt=""
+            loading="lazy"
+            onError={handleImgError}
+            className="w-full h-full object-cover group-hover:opacity-90 transition-opacity"
+          />
+          {thumbBroken && (
+            <div className="absolute inset-0 flex items-center justify-center p-2 text-[10px] font-mono opacity-50 text-center">
+              IG
+            </div>
+          )}
         </a>
-        <div className="flex items-center gap-2 shrink-0">
-          <StatusPill status={status} />
-          <button
-            type="button"
-            onClick={() => onToggle("liked")}
-            aria-pressed={isLiked}
-            className={`text-[11px] uppercase tracking-[0.1em] px-3 py-1.5 rounded-full border transition-colors ${
-              isLiked
-                ? "bg-teal text-charcoal border-teal"
-                : "border-charcoal/30 hover:border-teal hover:text-teal"
-            }`}
-          >
-            Aimer
-          </button>
-          <button
-            type="button"
-            onClick={() => onToggle("refused")}
-            aria-pressed={isRefused}
-            className={`text-[11px] uppercase tracking-[0.1em] px-3 py-1.5 rounded-full border transition-colors ${
-              isRefused
-                ? "bg-charcoal text-offwhite border-charcoal"
-                : "border-charcoal/30 hover:border-charcoal hover:bg-charcoal hover:text-offwhite"
-            }`}
-          >
-            Refuser
-          </button>
-          <button
-            type="button"
-            onClick={onRemove}
-            aria-label="Supprimer la submission"
-            className="text-base leading-none px-2 py-1 opacity-40 hover:opacity-100 transition-opacity"
-          >
-            ×
-          </button>
+        <div className="flex-1 min-w-0 flex flex-col gap-3">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`font-mono text-xs md:text-sm break-all hover:text-teal transition-colors ${isRefused ? "line-through" : ""}`}
+            >
+              → {url.replace(/^https?:\/\/(www\.)?/, "")}
+            </a>
+            <div className="flex items-center gap-2 shrink-0">
+              <StatusPill status={status} />
+              <button
+                type="button"
+                onClick={() => onToggle("liked")}
+                aria-pressed={isLiked}
+                className={`text-[11px] uppercase tracking-[0.1em] px-3 py-1.5 rounded-full border transition-colors ${
+                  isLiked
+                    ? "bg-teal text-charcoal border-teal"
+                    : "border-charcoal/30 hover:border-teal hover:text-teal"
+                }`}
+              >
+                Aimer
+              </button>
+              <button
+                type="button"
+                onClick={() => onToggle("refused")}
+                aria-pressed={isRefused}
+                className={`text-[11px] uppercase tracking-[0.1em] px-3 py-1.5 rounded-full border transition-colors ${
+                  isRefused
+                    ? "bg-charcoal text-offwhite border-charcoal"
+                    : "border-charcoal/30 hover:border-charcoal hover:bg-charcoal hover:text-offwhite"
+                }`}
+              >
+                Refuser
+              </button>
+              <button
+                type="button"
+                onClick={onRemove}
+                aria-label="Supprimer la submission"
+                className="text-base leading-none px-2 py-1 opacity-40 hover:opacity-100 transition-opacity"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+          <textarea
+            value={comment}
+            onChange={(e) => onComment(e.target.value)}
+            placeholder="Commentaire de MN…"
+            rows={1}
+            className="w-full bg-transparent text-sm resize-y outline-none placeholder:opacity-40 border-t border-charcoal/15 pt-2"
+          />
         </div>
       </div>
-      <textarea
-        value={comment}
-        onChange={(e) => onComment(e.target.value)}
-        placeholder="Commentaire de MN…"
-        rows={1}
-        className="w-full mt-3 bg-transparent text-sm resize-y outline-none placeholder:opacity-40 border-t border-charcoal/15 pt-2"
-      />
     </div>
   );
 }
