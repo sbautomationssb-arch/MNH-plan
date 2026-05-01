@@ -3,6 +3,7 @@ import { BucketCard } from "@/components/BucketCard";
 import { ReleaseList } from "@/components/ReleaseList";
 import { SubmissionQueue } from "@/components/SubmissionQueue";
 import { PlanCalendar } from "@/components/PlanCalendar";
+import { ArtistDrops } from "@/components/ArtistDrops";
 
 export default function Home() {
   return (
@@ -100,6 +101,8 @@ export default function Home() {
       <SubmissionQueue />
 
       <PlanCalendar />
+
+      <ArtistDrops />
 
       <footer className="mt-16 text-[11px] opacity-60">
         Ara3 Media × Marie-Neiges · plan vivant, updaté en continu.

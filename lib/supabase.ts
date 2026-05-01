@@ -11,6 +11,18 @@ export const PRODUCTION_STATUS_LABEL: Record<ProductionStatus, string> = {
   posted: "Posted",
 };
 
+export type ArtistVideoStatus = "pending" | "approved" | "changes_requested" | "rejected";
+export type ArtistVideoRow = {
+  id: string;
+  storage_path: string;
+  original_filename: string | null;
+  artist_note: string;
+  planner_comment: string;
+  status: ArtistVideoStatus;
+  created_at: string;
+  updated_at: string;
+};
+
 export type SubmissionRow = {
   id: string;
   url: string;
