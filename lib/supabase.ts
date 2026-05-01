@@ -7,6 +7,7 @@ export type SubmissionRow = {
   url: string;
   status: "pending" | "liked" | "refused";
   comment: string;
+  scheduled_for: string | null; // YYYY-MM-DD, null if not yet placed on calendar
   created_at: string;
   updated_at: string;
 };

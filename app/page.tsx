@@ -2,6 +2,7 @@ import { pillars, contrastPrinciple, buckets, releases, previewSet } from "@/lib
 import { BucketCard } from "@/components/BucketCard";
 import { ReleaseList } from "@/components/ReleaseList";
 import { SubmissionQueue } from "@/components/SubmissionQueue";
+import { PlanCalendar } from "@/components/PlanCalendar";
 
 export default function Home() {
   return (
@@ -97,6 +98,8 @@ export default function Home() {
       </section>
 
       <SubmissionQueue />
+
+      <PlanCalendar />
 
       <footer className="mt-16 text-[11px] opacity-60">
         Ara3 Media × Marie-Neiges · plan vivant, updaté en continu.
