@@ -35,6 +35,14 @@ const STATUSES: ArtistVideoStatus[] = [
   "rejected",
 ];
 
+const IMAGE_EXTS = ["jpg", "jpeg", "png", "webp", "gif", "heic", "heif", "avif"];
+
+function isImageFile(filename: string | null): boolean {
+  if (!filename) return false;
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  return IMAGE_EXTS.includes(ext);
+}
+
 export function ArtistDrops() {
   const supabase = useMemo(() => getSupabase(), []);
   const [hydrated, setHydrated] = useState(false);
@@ -201,9 +209,9 @@ export function ArtistDrops() {
         07 — Drops de Marie-Neiges
       </div>
       <p className="text-sm mb-6 max-w-2xl">
-        MN balance ses vidéos ici (drafts, finis, à review). Tu reviews,
-        commentes, approuves ou demandes des changements. Tout sync en temps
-        réel.
+        MN balance ses vidéos et photos ici (drafts, finis, à review). Tu
+        reviews, commentes, approuves ou demandes des changements. Tout sync
+        en temps réel.
       </p>
 
       {!supabase && hydrated && (
@@ -214,7 +222,7 @@ export function ArtistDrops() {
 
       <div className="bg-charcoal text-offwhite rounded-3xl p-5 md:p-6 mb-6">
         <div className="text-teal text-[10px] font-semibold uppercase tracking-[0.14em] mb-3">
-          Drop une vidéo
+          Drop une vidéo ou une photo
         </div>
         <textarea
           value={draftNote}
@@ -227,7 +235,7 @@ export function ArtistDrops() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="video/*"
+            accept="video/*,image/*"
             onChange={onFileChange}
             disabled={uploading || !supabase}
             className="text-xs text-offwhite/70 file:mr-3 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-[11px] file:uppercase file:tracking-[0.12em] file:font-semibold file:bg-teal file:text-charcoal hover:file:opacity-90 file:cursor-pointer disabled:opacity-30"
@@ -241,7 +249,7 @@ export function ArtistDrops() {
 
       {hydrated && supabase && rows.length === 0 && (
         <div className="text-sm opacity-50 italic">
-          Aucun drop encore. MN va commencer à pousser ses vidéos ici.
+          Aucun drop encore. MN va commencer à pousser ses contenus ici.
         </div>
       )}
 
@@ -281,16 +289,27 @@ function DropCard({
     "fr-CA",
     { hour: "2-digit", minute: "2-digit" },
   )}`;
+  const isImage = isImageFile(row.original_filename);
   return (
     <div className="bg-offwhite border border-charcoal/15 rounded-3xl overflow-hidden">
       <div className="flex flex-col md:flex-row">
         <div className="md:w-[40%] bg-charcoal flex items-center justify-center">
-          <video
-            src={videoUrl}
-            controls
-            preload="metadata"
-            className="w-full h-full max-h-[60vh] object-contain"
-          />
+          {isImage ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={videoUrl}
+              alt={row.original_filename ?? ""}
+              loading="lazy"
+              className="w-full h-full max-h-[60vh] object-contain"
+            />
+          ) : (
+            <video
+              src={videoUrl}
+              controls
+              preload="metadata"
+              className="w-full h-full max-h-[60vh] object-contain"
+            />
+          )}
         </div>
         <div className="flex-1 p-5 md:p-6 flex flex-col gap-4">
           <div className="flex items-start justify-between gap-3 flex-wrap">
