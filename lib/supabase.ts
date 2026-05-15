@@ -25,7 +25,8 @@ export type ArtistVideoRow = {
 
 export type SubmissionRow = {
   id: string;
-  url: string;
+  // Null for free-form note cards created from the calendar pool's empty card.
+  url: string | null;
   status: "pending" | "liked" | "refused";
   comment: string;
   scheduled_for: string | null; // YYYY-MM-DD, null if not yet placed on calendar

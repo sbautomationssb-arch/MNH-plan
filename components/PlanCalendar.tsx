@@ -30,6 +30,9 @@ const MONTH_NAMES = [
 ];
 const DAY_HEADERS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
+// Sentinel id used while dragging the always-on empty pool card.
+const DRAFT_DRAG_ID = "__draft__";
+
 function pad(n: number) {
   return n.toString().padStart(2, "0");
 }
@@ -78,6 +81,11 @@ export function PlanCalendar() {
   const [monthAnchor, setMonthAnchor] = useState<Date>(() => firstOfMonth(new Date()));
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+  const [draftText, setDraftText] = useState("");
+  const draftTextRef = useRef("");
+  useEffect(() => {
+    draftTextRef.current = draftText;
+  }, [draftText]);
 
   useEffect(() => {
     setHydrated(true);
@@ -168,6 +176,26 @@ export function PlanCalendar() {
     [supabase],
   );
 
+  const createNote = useCallback(
+    async (text: string, scheduled_for: string) => {
+      if (!supabase) return;
+      const { data, error } = await supabase
+        .from("submissions")
+        .insert({
+          url: null,
+          status: "liked",
+          comment: text,
+          scheduled_for,
+        })
+        .select()
+        .single();
+      if (error || !data) return;
+      const row = data as SubmissionRow;
+      setRows((prev) => (prev.some((s) => s.id === row.id) ? prev : [row, ...prev]));
+    },
+    [supabase],
+  );
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = useMemo(
     () => (selectedId ? rows.find((r) => r.id === selectedId) ?? null : null),
@@ -195,10 +223,25 @@ export function PlanCalendar() {
     if (!draggingId) return;
     const id = draggingId;
     setDraggingId(null);
+    if (id === DRAFT_DRAG_ID) {
+      // Dropping the empty pool card onto a day creates a free-form note.
+      // Dropping back into the pool is a no-op (it's already there).
+      if (target === null) return;
+      const text = draftTextRef.current.trim();
+      void createNote(text, target);
+      setDraftText("");
+      return;
+    }
     const current = rows.find((r) => r.id === id);
     if (!current) return;
     if ((current.scheduled_for ?? null) === target) return;
     move(id, target);
+  };
+
+  const onDraftDragStart = (e: DragEvent<HTMLDivElement>) => {
+    setDraggingId(DRAFT_DRAG_ID);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", DRAFT_DRAG_ID);
   };
 
   const pool = useMemo(
@@ -253,6 +296,11 @@ export function PlanCalendar() {
           onDrop={onDrop(null)}
           onSetBucket={setBucket}
           onOpen={setSelectedId}
+          draftText={draftText}
+          onDraftTextChange={setDraftText}
+          onDraftDragStart={onDraftDragStart}
+          onDraftDragEnd={onDragEnd}
+          isDraftDragging={draggingId === DRAFT_DRAG_ID}
         />
         <div className="flex-1 min-w-0">
           <MonthHeader
@@ -384,6 +432,11 @@ function PoolColumn({
   onDrop,
   onSetBucket,
   onOpen,
+  draftText,
+  onDraftTextChange,
+  onDraftDragStart,
+  onDraftDragEnd,
+  isDraftDragging,
 }: {
   rows: SubmissionRow[];
   dragOverKey: string | null;
@@ -393,6 +446,11 @@ function PoolColumn({
   onDrop: (e: DragEvent<HTMLDivElement>) => void;
   onSetBucket: (id: string, bucket_id: number | null) => void;
   onOpen: (id: string) => void;
+  draftText: string;
+  onDraftTextChange: (next: string) => void;
+  onDraftDragStart: (e: DragEvent<HTMLDivElement>) => void;
+  onDraftDragEnd: () => void;
+  isDraftDragging: boolean;
 }) {
   const isOver = dragOverKey === "__pool__";
   return (
@@ -409,13 +467,20 @@ function PoolColumn({
         </div>
         <div className="text-[10px] opacity-50">{rows.length}</div>
       </div>
-      {rows.length === 0 ? (
-        <p className="text-xs italic opacity-50">
-          Aime des submissions ci-dessus, elles apparaîtront ici.
-        </p>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {rows.map((r) => (
+      <div className="flex flex-col gap-2">
+        <DraftCard
+          text={draftText}
+          onChange={onDraftTextChange}
+          onDragStart={onDraftDragStart}
+          onDragEnd={onDraftDragEnd}
+          isDragging={isDraftDragging}
+        />
+        {rows.length === 0 ? (
+          <p className="text-xs italic opacity-50 mt-1">
+            Aime des submissions ci-dessus, elles apparaîtront ici. Ou écris une note dans la carte au-dessus.
+          </p>
+        ) : (
+          rows.map((r) => (
             <PoolCard
               key={r.id}
               row={r}
@@ -424,9 +489,58 @@ function PoolColumn({
               onSetBucket={(bid) => onSetBucket(r.id, bid)}
               onOpen={() => onOpen(r.id)}
             />
-          ))}
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DraftCard({
+  text,
+  onChange,
+  onDragStart,
+  onDragEnd,
+  isDragging,
+}: {
+  text: string;
+  onChange: (next: string) => void;
+  onDragStart: (e: DragEvent<HTMLDivElement>) => void;
+  onDragEnd: () => void;
+  isDragging: boolean;
+}) {
+  return (
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      title="Écris une note, puis glisse cette carte sur un jour du calendrier."
+      className={`group flex gap-2 bg-offwhite/[0.04] hover:bg-offwhite/[0.07] border border-dashed border-offwhite/25 rounded-xl p-2 cursor-grab active:cursor-grabbing transition-colors ${
+        isDragging ? "opacity-40" : ""
+      }`}
+    >
+      <div className="shrink-0 w-14 h-14 rounded-md bg-offwhite/10 border border-offwhite/10 flex items-center justify-center text-offwhite/40 text-base">
+        ✎
+      </div>
+      <div className="flex-1 min-w-0 flex flex-col gap-1">
+        <div className="flex items-center justify-between">
+          <span className="text-[9px] uppercase tracking-[0.14em] text-teal/80 font-semibold">
+            Note libre
+          </span>
+          <span className="text-[9px] opacity-40 group-hover:opacity-70 transition-opacity">
+            ⇢ glisser
+          </span>
         </div>
-      )}
+        <textarea
+          value={text}
+          onChange={(e) => onChange(e.target.value)}
+          draggable={false}
+          onDragStart={(e) => e.stopPropagation()}
+          placeholder="Idée, shoot, todo… glisse vers un jour."
+          rows={2}
+          className="w-full bg-transparent text-[11px] resize-none outline-none placeholder:opacity-40 leading-snug"
+        />
+      </div>
     </div>
   );
 }
@@ -444,6 +558,7 @@ function PoolCard({
   onSetBucket: (bucket_id: number | null) => void;
   onOpen: () => void;
 }) {
+  const isNote = !row.url;
   return (
     <div
       draggable
@@ -452,20 +567,32 @@ function PoolCard({
       onClick={onOpen}
       className="flex gap-2 bg-offwhite/5 hover:bg-offwhite/10 border border-offwhite/10 rounded-xl p-2 cursor-grab active:cursor-grabbing transition-colors"
     >
-      <Thumb url={row.url} size={56} />
+      {isNote ? (
+        <div className="shrink-0 w-14 h-14 rounded-md bg-offwhite/10 border border-offwhite/10 flex items-center justify-center text-offwhite/40 text-base">
+          ✎
+        </div>
+      ) : (
+        <Thumb url={row.url as string} size={56} />
+      )}
       <div className="flex-1 min-w-0 flex flex-col gap-1">
         <div className="flex items-center justify-between gap-2">
-          <a
-            href={row.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            onDragStart={(e) => e.stopPropagation()}
-            draggable={false}
-            className="text-[10px] font-mono break-all hover:text-teal opacity-80 min-w-0"
-          >
-            {row.url.replace(/^https?:\/\/(www\.)?instagram\.com\//, "")}
-          </a>
+          {isNote ? (
+            <span className="text-[9px] uppercase tracking-[0.14em] text-teal/80 font-semibold">
+              Note
+            </span>
+          ) : (
+            <a
+              href={row.url as string}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              onDragStart={(e) => e.stopPropagation()}
+              draggable={false}
+              className="text-[10px] font-mono break-all hover:text-teal opacity-80 min-w-0"
+            >
+              {(row.url as string).replace(/^https?:\/\/(www\.)?instagram\.com\//, "")}
+            </a>
+          )}
           {row.production_status && (
             <span
               className={`shrink-0 text-[8px] font-bold uppercase tracking-[0.08em] px-1.5 py-0.5 rounded ${STATUS_BADGE_CLS[row.production_status]}`}
@@ -475,7 +602,9 @@ function PoolCard({
           )}
         </div>
         {row.comment && (
-          <p className="text-[11px] opacity-70 line-clamp-2">{row.comment}</p>
+          <p className={`text-[11px] line-clamp-2 ${isNote ? "opacity-90" : "opacity-70"}`}>
+            {row.comment}
+          </p>
         )}
         <div className="mt-auto pt-1">
           <BucketPicker value={row.bucket_id} onChange={onSetBucket} />
@@ -500,16 +629,20 @@ function DayCard({
   onSetBucket: (bucket_id: number | null) => void;
   onOpen: () => void;
 }) {
+  const isNote = !row.url;
   const bucket = row.bucket_id != null ? buckets.find((b) => b.id === row.bucket_id) : null;
   const status = row.production_status;
   const tooltip = [
-    row.url,
+    isNote ? "Note" : row.url,
     bucket ? `Bucket #${bucket.id} — ${bucket.name}` : null,
     status ? `Status: ${PRODUCTION_STATUS_LABEL[status]}` : null,
     row.comment || null,
   ]
     .filter(Boolean)
     .join("\n\n");
+  const label = isNote
+    ? row.comment.trim() || "Note vide"
+    : (row.url as string).replace(/^https?:\/\/(www\.)?instagram\.com\/(p|reel|tv)\//, "");
   return (
     <div
       draggable
@@ -527,9 +660,19 @@ function DayCard({
         }`}
         aria-label={status ? PRODUCTION_STATUS_LABEL[status] : "Aucun status"}
       />
-      <Thumb url={row.url} size={28} compact />
-      <span className="text-[9px] font-mono truncate opacity-70 flex-1 min-w-0">
-        {row.url.replace(/^https?:\/\/(www\.)?instagram\.com\/(p|reel|tv)\//, "")}
+      {isNote ? (
+        <span className="shrink-0 w-7 h-7 rounded bg-offwhite/10 flex items-center justify-center text-offwhite/50 text-[11px]">
+          ✎
+        </span>
+      ) : (
+        <Thumb url={row.url as string} size={28} compact />
+      )}
+      <span
+        className={`text-[9px] truncate flex-1 min-w-0 ${
+          isNote ? "opacity-90" : "font-mono opacity-70"
+        }`}
+      >
+        {label}
       </span>
       <BucketPicker value={row.bucket_id} onChange={onSetBucket} compact />
     </div>
@@ -610,17 +753,29 @@ function CardDetailModal({
 
         <div className="p-4 md:p-5 flex flex-col md:flex-row gap-4 border-b border-charcoal/10">
           <div className="shrink-0">
-            <Thumb url={row.url} size={160} />
+            {row.url ? (
+              <Thumb url={row.url} size={160} />
+            ) : (
+              <div className="w-[160px] h-[160px] rounded-md bg-charcoal/10 border border-charcoal/15 flex items-center justify-center text-charcoal/40 text-3xl">
+                ✎
+              </div>
+            )}
           </div>
           <div className="flex-1 min-w-0 flex flex-col gap-3">
-            <a
-              href={row.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-mono text-xs break-all hover:text-teal transition-colors"
-            >
-              → {row.url.replace(/^https?:\/\/(www\.)?/, "")}
-            </a>
+            {row.url ? (
+              <a
+                href={row.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-xs break-all hover:text-teal transition-colors"
+              >
+                → {row.url.replace(/^https?:\/\/(www\.)?/, "")}
+              </a>
+            ) : (
+              <div className="text-[10px] uppercase tracking-[0.14em] text-teal font-semibold">
+                Note libre · pas d'URL
+              </div>
+            )}
 
             <div>
               <div className="text-[10px] uppercase tracking-[0.12em] opacity-60 mb-1.5">

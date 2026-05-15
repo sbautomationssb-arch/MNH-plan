@@ -92,7 +92,12 @@ export function SubmissionQueue() {
     }
     const matches = draft.match(URL_REGEX) ?? [];
     const seen = new Set<string>();
-    const existing = new Set(submissions.map((s) => normalize(s.url)));
+    const existing = new Set(
+      submissions
+        .map((s) => s.url)
+        .filter((u): u is string => !!u)
+        .map(normalize),
+    );
     const toInsert: { url: string }[] = [];
     let skipped = 0;
     matches.forEach((raw) => {
@@ -174,7 +179,13 @@ export function SubmissionQueue() {
     [supabase],
   );
 
-  const counts = submissions.reduce(
+  // Free-form note cards (url=null) live only in the calendar pool.
+  const igSubmissions = useMemo(
+    () => submissions.filter((s) => !!s.url),
+    [submissions],
+  );
+
+  const counts = igSubmissions.reduce(
     (acc, s) => {
       acc[s.status] += 1;
       return acc;
@@ -251,9 +262,9 @@ export function SubmissionQueue() {
         )}
       </div>
 
-      {hydrated && submissions.length > 0 && (
+      {hydrated && igSubmissions.length > 0 && (
         <div className="flex items-center gap-3 text-[11px] uppercase tracking-[0.12em] mb-4 opacity-70 flex-wrap">
-          <span>{submissions.length} total</span>
+          <span>{igSubmissions.length} total</span>
           <span>·</span>
           <span>{counts.pending} pending</span>
           <span>·</span>
@@ -263,15 +274,15 @@ export function SubmissionQueue() {
         </div>
       )}
 
-      {hydrated && supabase && submissions.length === 0 && !loadError && (
+      {hydrated && supabase && igSubmissions.length === 0 && !loadError && (
         <div className="text-sm opacity-50 italic">
           Aucune submission encore. Drop des URLs au-dessus pour commencer.
         </div>
       )}
 
-      {hydrated && submissions.length > 0 && (
+      {hydrated && igSubmissions.length > 0 && (
         <SubmissionList
-          submissions={submissions}
+          submissions={igSubmissions}
           onToggle={toggleStatus}
           onComment={setComment}
           onRemove={remove}
@@ -357,6 +368,8 @@ function SubmissionRowItem({
   onRemove: () => void;
 }) {
   const { url, status, comment } = submission;
+  // Free-form notes (url=null) never reach this list — see igSubmissions filter.
+  if (!url) return null;
   const isLiked = status === "liked";
   const isRefused = status === "refused";
 
