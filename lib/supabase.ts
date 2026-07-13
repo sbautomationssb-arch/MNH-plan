@@ -2,6 +2,12 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+// Scope de l'artiste : le Supabase est PARTAGÉ entre plusieurs dashboards
+// (Marie-Neiges, Kevin Moroz…). Toutes les requêtes sur submissions /
+// artist_videos filtrent par cette valeur, et tous les INSERT la posent.
+// Une valeur par app — ici Marie-Neiges. (Voir migration 0007_artist_scope.sql.)
+export const ARTIST_SLUG = "marie-neiges";
+
 export type ProductionStatus = "draft" | "shot" | "edited" | "posted";
 export const PRODUCTION_STATUSES: ProductionStatus[] = ["draft", "shot", "edited", "posted"];
 export const PRODUCTION_STATUS_LABEL: Record<ProductionStatus, string> = {
@@ -14,6 +20,7 @@ export const PRODUCTION_STATUS_LABEL: Record<ProductionStatus, string> = {
 export type ArtistVideoStatus = "pending" | "approved" | "changes_requested" | "rejected";
 export type ArtistVideoRow = {
   id: string;
+  artist: string;
   storage_path: string;
   original_filename: string | null;
   artist_note: string;
@@ -25,6 +32,7 @@ export type ArtistVideoRow = {
 
 export type SubmissionRow = {
   id: string;
+  artist: string;
   // Null for free-form note cards created from the calendar pool's empty card.
   url: string | null;
   status: "pending" | "liked" | "refused";

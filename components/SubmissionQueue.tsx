@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type SyntheticEvent } from "react";
-import { getSupabase, type SubmissionRow } from "@/lib/supabase";
+import { getSupabase, ARTIST_SLUG, type SubmissionRow } from "@/lib/supabase";
 
 type Status = SubmissionRow["status"];
 
@@ -30,6 +30,7 @@ export function SubmissionQueue() {
     supabase
       .from("submissions")
       .select("*")
+      .eq("artist", ARTIST_SLUG)
       .order("created_at", { ascending: false })
       .then(({ data, error }) => {
         if (cancelled) return;
@@ -51,7 +52,7 @@ export function SubmissionQueue() {
       .channel("submissions-changes")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "submissions" },
+        { event: "*", schema: "public", table: "submissions", filter: `artist=eq.${ARTIST_SLUG}` },
         (payload) => {
           setSubmissions((prev) => {
             if (payload.eventType === "INSERT") {
@@ -98,7 +99,7 @@ export function SubmissionQueue() {
         .filter((u): u is string => !!u)
         .map(normalize),
     );
-    const toInsert: { url: string }[] = [];
+    const toInsert: { url: string; artist: string }[] = [];
     let skipped = 0;
     matches.forEach((raw) => {
       const url = normalize(raw);
@@ -107,7 +108,7 @@ export function SubmissionQueue() {
         return;
       }
       seen.add(url);
-      toInsert.push({ url });
+      toInsert.push({ url, artist: ARTIST_SLUG });
     });
     if (toInsert.length === 0) {
       setLastBatch({ added: 0, skipped });
