@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type SyntheticEvent } from "react";
 import {
   getSupabase,
-  ARTIST_SLUG,
   PRODUCTION_STATUSES,
   PRODUCTION_STATUS_LABEL,
   type ProductionStatus,
@@ -95,7 +94,6 @@ export function PlanCalendar() {
     supabase
       .from("submissions")
       .select("*")
-      .eq("artist", ARTIST_SLUG)
       .order("created_at", { ascending: false })
       .then(({ data, error }) => {
         if (cancelled || error) return;
@@ -112,7 +110,7 @@ export function PlanCalendar() {
       .channel("submissions-calendar")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "submissions", filter: `artist=eq.${ARTIST_SLUG}` },
+        { event: "*", schema: "public", table: "submissions" },
         (payload) => {
           setRows((prev) => {
             if (payload.eventType === "INSERT") {
@@ -188,7 +186,6 @@ export function PlanCalendar() {
           status: "liked",
           comment: text,
           scheduled_for,
-          artist: ARTIST_SLUG,
         })
         .select()
         .single();

@@ -10,7 +10,6 @@ import {
 } from "react";
 import {
   getSupabase,
-  ARTIST_SLUG,
   type ArtistVideoRow,
   type ArtistVideoStatus,
 } from "@/lib/supabase";
@@ -60,7 +59,6 @@ export function ArtistDrops() {
     supabase
       .from("artist_videos")
       .select("*")
-      .eq("artist", ARTIST_SLUG)
       .order("created_at", { ascending: false })
       .then(({ data, error }) => {
         if (cancelled || error) return;
@@ -77,7 +75,7 @@ export function ArtistDrops() {
       .channel("artist_videos-changes")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "artist_videos", filter: `artist=eq.${ARTIST_SLUG}` },
+        { event: "*", schema: "public", table: "artist_videos" },
         (payload) => {
           setRows((prev) => {
             if (payload.eventType === "INSERT") {
@@ -127,7 +125,6 @@ export function ArtistDrops() {
             storage_path: path,
             original_filename: file.name,
             artist_note: draftNote,
-            artist: ARTIST_SLUG,
           });
         if (insertErr) throw insertErr;
         setDraftNote("");
